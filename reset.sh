@@ -1,2 +1,2 @@
 #!/bin/bash
-go build && ./basic.com
+go build && ./todo_list
