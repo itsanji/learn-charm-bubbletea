@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	slicemethod "todo_list/sliceMethod"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 )
@@ -25,19 +27,19 @@ type ShopList struct {
 func initialModel() ShopList {
 	return ShopList{
 		choices: []Item{
-			Item{
+			{
 				id:    uuid.New(),
 				title: "Carrot",
 			},
-			Item{
+			{
 				id:    uuid.New(),
 				title: "BlueBerry",
 			},
-			Item{
+			{
 				id:    uuid.New(),
 				title: "Oranges",
 			},
-			Item{
+			{
 				id:    uuid.New(),
 				title: "Lemon",
 			},
@@ -70,8 +72,8 @@ func (m ShopList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return item != m.choices[m.cursor].id
 			}
 			// Remove current choice from selected list
-			if inList := isInList(m.selected, m.choices[m.cursor]); inList {
-				m.selected = sliceFilter(m.selected, compareFunction)
+			if inList := slicemethod.IsInList(m.selected, m.choices[m.cursor].id); inList {
+				m.selected = slicemethod.SliceFilter(m.selected, compareFunction)
 			} else {
 				// Add current choice to selected list
 				m.selected = append(m.selected, m.choices[m.cursor].id)
@@ -92,7 +94,7 @@ func (m ShopList) View() string {
 
 		// Is this record selected
 		isSelected := " "
-		if ok := isInList(m.selected, choice); ok {
+		if ok := slicemethod.IsInList(m.selected, choice.id); ok {
 			isSelected = "X"
 		}
 
@@ -110,24 +112,4 @@ func main() {
 		fmt.Printf("There's an error %v", err)
 		os.Exit(1)
 	}
-}
-
-func isInList(list []uuid.UUID, item Item) bool {
-	for i := 0; i < len(list); i++ {
-		if list[i] == item.id {
-			return true
-		}
-	}
-	return false
-}
-
-func sliceFilter[T comparable](slice []T, compareFunction func(T) bool) []T {
-	var result []T
-	for _, v := range slice {
-		if compareFunction(v) {
-			result = append(result, v)
-		}
-	}
-
-	return result
 }
