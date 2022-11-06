@@ -1,18 +1,32 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 
+	"basic.com/metaweather"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type Model struct {
-	count int
+	textInput   textinput.Model
+	spinner     spinner.Model
+	metaweather *metaweather.Client
+
+	typing   bool
+	loading  bool
+	err      error
+	location metaweather.Location
 }
 
 func (m *Model) Init() tea.Cmd {
-
+	m.textInput.Blink()
 	return nil
 }
 
@@ -22,22 +36,100 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
-		case "up":
-			m.count++
-		case "down":
-			m.count--
+		case "enter":
+			if m.typing {
+				query := strings.TrimSpace(m.textInput.Value())
+				if query != "" {
+					m.typing = false
+					m.loading = true
+					return m, tea.Batch(
+						spinner.Tick,
+						m.fetchWeather(query),
+					)
+				}
+			}
+		case "esc":
+			if !m.typing {
+				m.typing = true
+				m.loading = false
+				m.err = nil
+				return m, nil
+			}
 		}
+	case GotWeather:
+		m.loading = false
+		if err := msg.Err; err != nil {
+			m.err = err
+			return m, nil
+		}
+
+		m.location = msg.Location
+		return m, nil
 	}
+
+	if m.typing {
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+
+	if m.loading {
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 
 func (m *Model) View() string {
 
-	return fmt.Sprintf("Count: %d \n\n   Increase ↑      Decrease ↓", m.count)
+	if m.typing {
+		return fmt.Sprintf("Enter location: \n %s", m.textInput.View())
+	}
+
+	if m.loading {
+		return fmt.Sprintf("%s Loading, please wait.. \n", m.spinner.View())
+	}
+
+	if err := m.err; err != nil {
+		return fmt.Sprintf("Could not fetch weather: \n %v", err)
+	}
+	return fmt.Sprintf("Current weather in %s is %.0f °C", m.location.Title, m.location.ConsolidatedWeather[0].TheTemp)
+}
+
+type GotWeather struct {
+	Err      error
+	Location metaweather.Location
+}
+
+// Fetch Weather Handler
+func (m Model) fetchWeather(query string) tea.Cmd {
+	return func() tea.Msg {
+		loc, err := m.metaweather.LocationByQuery(context.Background(), query)
+		if err != nil {
+			return GotWeather{Err: err}
+		}
+
+		return GotWeather{Location: loc}
+	}
 }
 
 func main() {
-	err := tea.NewProgram(&Model{}, tea.WithAltScreen()).Start()
+	t := textinput.NewModel()
+	t.Focus()
+	s := spinner.NewModel()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	initialModel := &Model{
+		textInput:   t,
+		spinner:     s,
+		typing:      true,
+		metaweather: &metaweather.Client{HTTPClient: http.DefaultClient},
+	}
+
+	err := tea.NewProgram(initialModel, tea.WithAltScreen()).Start()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
