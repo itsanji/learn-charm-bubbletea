@@ -5,19 +5,45 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 )
 
+type Item struct {
+	id    uuid.UUID
+	title string
+}
+
 type ShopList struct {
-	choices  []string         // item on the list
-	cursor   int              // which item out cursor is pointing at
-	selected map[int]struct{} // selected item
+	choices  []Item      // item on the list
+	cursor   int         // which item out cursor is pointing at
+	selected []uuid.UUID // selected item
+
+	// appState string // View | Add
+	// textInput textinput.Model // Text Input
 }
 
 func initialModel() ShopList {
 	return ShopList{
-		choices:  []string{"Carrot", "Tofu", "Blueberries", "Orange"},
+		choices: []Item{
+			Item{
+				id:    uuid.New(),
+				title: "Carrot",
+			},
+			Item{
+				id:    uuid.New(),
+				title: "BlueBerry",
+			},
+			Item{
+				id:    uuid.New(),
+				title: "Oranges",
+			},
+			Item{
+				id:    uuid.New(),
+				title: "Lemon",
+			},
+		},
 		cursor:   0,
-		selected: make(map[int]struct{}),
+		selected: make([]uuid.UUID, 0),
 	}
 }
 
@@ -40,11 +66,15 @@ func (m ShopList) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter", " ":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
+			compareFunction := func(item uuid.UUID) bool {
+				return item != m.choices[m.cursor].id
+			}
+			// Remove current choice from selected list
+			if inList := isInList(m.selected, m.choices[m.cursor]); inList {
+				m.selected = sliceFilter(m.selected, compareFunction)
 			} else {
-				m.selected[m.cursor] = struct{}{}
+				// Add current choice to selected list
+				m.selected = append(m.selected, m.choices[m.cursor].id)
 			}
 		}
 	}
@@ -62,12 +92,12 @@ func (m ShopList) View() string {
 
 		// Is this record selected
 		isSelected := " "
-		if _, ok := m.selected[i]; ok {
+		if ok := isInList(m.selected, choice); ok {
 			isSelected = "X"
 		}
 
 		// Render the row
-		row := fmt.Sprintf("%s [%s] %s \n", pointer, isSelected, choice)
+		row := fmt.Sprintf("%s [%s] %s \n", pointer, isSelected, choice.title)
 		s += row
 	}
 	s += "\n\n\nPress Q to quit."
@@ -80,4 +110,24 @@ func main() {
 		fmt.Printf("There's an error %v", err)
 		os.Exit(1)
 	}
+}
+
+func isInList(list []uuid.UUID, item Item) bool {
+	for i := 0; i < len(list); i++ {
+		if list[i] == item.id {
+			return true
+		}
+	}
+	return false
+}
+
+func sliceFilter[T comparable](slice []T, compareFunction func(T) bool) []T {
+	var result []T
+	for _, v := range slice {
+		if compareFunction(v) {
+			result = append(result, v)
+		}
+	}
+
+	return result
 }
